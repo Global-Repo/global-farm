@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Unlicensed
 
-import './MasterChef.sol';
+import '../Managers/MasterChef.sol';
+import './IBEP20.sol';
 
 pragma solidity 0.6.12;
 

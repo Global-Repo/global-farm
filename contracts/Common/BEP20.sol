@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Unlicensed
 
 import './Ownable.sol';
-import './IBEP20.sol';
 import './Context.sol';
 import './DevPower.sol';
-import '../MainSC/Address.sol';
-import '../MainSC/SafeMath.sol';
+import './Address.sol';
+import './SafeMath.sol';
+import '../Interfaces/IBEP20.sol';
 
 pragma solidity 0.6.12;
 

@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: Unlicensed
 
 import '../Common/Ownable.sol';
-import '../Common/IBEP20.sol';
 import '../Common/BEP20.sol';
-
+import '../Common/SafeMath.sol';
+import '../Common/Address.sol';
+import '../Interfaces/IBEP20.sol';
 import './NativeToken.sol';
-
-// Different version than Masterchef's.
-import '../MainSC/SafeMath.sol';
-import '../MainSC/Address.sol';
 
 pragma solidity 0.6.12;
 

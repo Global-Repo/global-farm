@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Unlicensed
-import './SafeMathM.sol';
+
+import './SafeMath.sol';
 import './Address.sol';
-import '../Common/IBEP20.sol';
+import './IBEP20.sol';
+
 pragma solidity 0.6.12;
 
 /**
@@ -19,7 +21,7 @@ pragma solidity 0.6.12;
  * which allows you to call the safe operations as `token.safeTransfer(...)`, etc.
  */
 library SafeBEP20 {
-    using SafeMathM for uint256;
+    using SafeMath for uint256;
     using Address for address;
 
     function safeTransfer(

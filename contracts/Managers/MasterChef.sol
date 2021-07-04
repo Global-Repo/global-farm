@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Unlicensed
 
-import '../Common/IBEP20.sol';
 import '../Common/BEP20.sol';
 import '../Common/Context.sol';
 import '../Common/Ownable.sol';
+import '../Common/Address.sol';
+import '../Common/SafeBEP20.sol';
+import '../Common/SafeMath.sol';
+import '../Interfaces/IBEP20.sol';
+import '../Interfaces/IMigratorChef.sol';
 import '../Tokens/NativeToken.sol';
 import '../Tokens/QuoteToken.sol';
-import './Address.sol';
-import './SafeBEP20.sol';
-import './IMigratorChef.sol';
 
-// Different version than the token's SC to preserve max security
-import './SafeMathM.sol';
 
 pragma solidity 0.6.12;
 
@@ -19,7 +18,7 @@ pragma solidity 0.6.12;
 // Note that it's ownable and the owner wields tremendous power.
 // Have fun reading it. Hopefully it's bug-free. God bless.
 contract MasterChef is Ownable {
-    using SafeMathM for uint256;
+    using SafeMath for uint256;
     using SafeBEP20 for IBEP20;
 
     // Info of each user.
