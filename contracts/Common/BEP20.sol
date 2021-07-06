@@ -5,7 +5,7 @@ import './Context.sol';
 import './DevPower.sol';
 import './Address.sol';
 import './SafeMath.sol';
-import '../Interfaces/IBEP20.sol';
+import '../Factory/IBEP20.sol';
 
 pragma solidity 0.6.12;
 
