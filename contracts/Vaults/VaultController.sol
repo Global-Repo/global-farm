@@ -17,7 +17,7 @@ abstract contract VaultController is IVaultController, PausableUpgradeable, Whit
     using SafeBEP20 for IBEP20;
 
     /* ========== CONSTANT VARIABLES ========== */
-    BEP20 private constant BUNNY = BEP20(0xC9849E6fdB743d08fAeE3E34dd2D1bc69EA11a51);
+    BEP20 private constant GLOBAL = BEP20(0x2d1c09b9252F91019C6f31584653EB0A5E39aAB4);
 
     /* ========== STATE VARIABLES ========== */
 
@@ -81,7 +81,7 @@ abstract contract VaultController is IVaultController, PausableUpgradeable, Whit
         // can zero
         _minter = IBunnyMinterV2(newMinter);
         if (newMinter != address(0)) {
-            require(newMinter == BUNNY.getOwner(), 'VaultController: not bunny minter');
+            require(newMinter == GLOBAL.getOwner(), 'VaultController: not bunny minter');
             _stakingToken.safeApprove(newMinter, 0);
             _stakingToken.safeApprove(newMinter, uint(~0));
         }

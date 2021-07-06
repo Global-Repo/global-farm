@@ -38,7 +38,8 @@ contract VaultCakeToCake is VaultController, IStrategy {
         __VaultController_init(CAKE);
         CAKE.safeApprove(address(CAKE_MASTER_CHEF), uint(~0));
 
-        setMinter(0x8cB88701790F650F273c8BB2Cc4c5f439cd65219);
+        // TODO: Pongo nuestro MC por ahora
+        setMinter(0x7db533569958cC6876aD8252227AaFd39c39B422);
     }
 
     /* ========== VIEW FUNCTIONS ========== */
