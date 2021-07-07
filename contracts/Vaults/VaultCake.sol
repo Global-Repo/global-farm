@@ -217,12 +217,13 @@ contract VaultCakeToCake is VaultController, IStrategy {
     }
 
     function _deposit(uint _amount, address _to) private notPaused {
-        uint _pool = balance();
+        uint _pool = balance(); // amount de cakes que te aquest vault al pool de cake
         CAKE.safeTransferFrom(msg.sender, address(this), _amount);
         uint shares = 0;
         if (totalShares == 0) {
             shares = _amount;
         } else {
+            // = 0.016 cakes x 7148447 / 13570561 cakes = 0.008428182 shares
             shares = (_amount.mul(totalShares)).div(_pool);
         }
 

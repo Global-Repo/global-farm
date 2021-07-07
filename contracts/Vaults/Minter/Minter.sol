@@ -9,6 +9,7 @@ import "IStakingRewards.sol";
 import "IPriceCalculator.sol";
 import "ZapBSC.sol";
 import "SafeToken.sol";
+import "../../../contracts.old/MasterChef.sol";
 
 contract Minter is IBunnyMinterV2, OwnableUpgradeable {
     using SafeMath for uint;
@@ -17,7 +18,7 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
     /* ========== CONSTANTS ============= */
 
     address public constant WBNB = 0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c;
-    address public constant BUNNY = 0xC9849E6fdB743d08fAeE3E34dd2D1bc69EA11a51;
+    address public constant GLOBAL = 0x2d1c09b9252F91019C6f31584653EB0A5E39aAB4;
     address public constant BUNNY_POOL = 0xCADc8CB26c8C7cB46500E61171b5F27e9bd7889D;
 
     address public constant TREASURY = 0x0989091F27708Bc92ea4cA60073e03592B94C0eE;
@@ -74,13 +75,13 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
         _deprecated_bunnyPerProfitBNB = 5e18;
         _deprecated_bunnyPerBunnyBNBFlip = 6e18;
 
-        IBEP20(BUNNY).approve(BUNNY_POOL, uint(- 1));
+        IBEP20(GLOBAL).approve(BUNNY_POOL, uint(- 1));
     }
 
     /* ========== RESTRICTED FUNCTIONS ========== */
 
     function transferBunnyOwner(address _owner) external onlyOwner {
-        Ownable(BUNNY).transferOwnership(_owner);
+        Ownable(GLOBAL).transferOwnership(_owner);
     }
 
     function setWithdrawalFee(uint _fee) external onlyOwner {
@@ -123,7 +124,7 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
     /* ========== VIEWS ========== */
 
     function isMinter(address account) public view override returns (bool) {
-        if (IBEP20(BUNNY).getOwner() != address(this)) {
+        if (IBEP20(GLOBAL).getOwner() != address(this)) {
             return false;
         }
         return _minters[account];
@@ -166,8 +167,8 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
         uint feeSum = _performanceFee.add(_withdrawalFee);
         _transferAsset(asset, feeSum);
 
-        if (asset == BUNNY) {
-            IBEP20(BUNNY).safeTransfer(DEAD, feeSum);
+        if (asset == GLOBAL) {
+            IBEP20(GLOBAL).safeTransfer(DEAD, feeSum);
             return;
         }
 
@@ -222,11 +223,11 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
     function safeBunnyTransfer(address _to, uint _amount) external override onlyBunnyChef {
         if (_amount == 0) return;
 
-        uint bal = IBEP20(BUNNY).balanceOf(address(this));
+        uint bal = IBEP20(GLOBAL).balanceOf(address(this));
         if (_amount <= bal) {
-            IBEP20(BUNNY).safeTransfer(_to, _amount);
+            IBEP20(GLOBAL).safeTransfer(_to, _amount);
         } else {
-            IBEP20(BUNNY).safeTransfer(_to, bal);
+            IBEP20(GLOBAL).safeTransfer(_to, bal);
         }
     }
 
@@ -239,17 +240,17 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
     /* ========== PRIVATE FUNCTIONS ========== */
 
     function _marketBuy(address asset, uint amount, address to) private {
-        uint _initBunnyAmount = IBEP20(BUNNY).balanceOf(address(this));
+        uint _initBunnyAmount = IBEP20(GLOBAL).balanceOf(address(this));
 
         if (asset == address(0)) {
-            zap.zapIn{ value : amount }(BUNNY);
+            zap.zapIn{ value : amount }(GLOBAL);
         }
         else if (keccak256(abi.encodePacked(IPancakePair(asset).symbol())) == keccak256("Cake-LP")) {
             if (IBEP20(asset).allowance(address(this), address(router)) == 0) {
                 IBEP20(asset).safeApprove(address(router), uint(- 1));
             }
 
-            IPancakePair pair = IPancakePair(asset);
+            ITokenPair pair = IPancakePair(asset);
             address token0 = pair.token0();
             address token1 = pair.token1();
 
@@ -267,12 +268,12 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
                 IBEP20(token1).safeApprove(address(zap), uint(- 1));
             }
 
-            if (token0 != BUNNY) {
-                zap.zapInToken(token0, amountToken0, BUNNY);
+            if (token0 != GLOBAL) {
+                zap.zapInToken(token0, amountToken0, GLOBAL);
             }
 
-            if (token1 != BUNNY) {
-                zap.zapInToken(token1, amountToken1, BUNNY);
+            if (token1 != GLOBAL) {
+                zap.zapInToken(token1, amountToken1, GLOBAL);
             }
         }
         else {
@@ -280,11 +281,11 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
                 IBEP20(asset).safeApprove(address(zap), uint(- 1));
             }
 
-            zap.zapInToken(asset, amount, BUNNY);
+            zap.zapInToken(asset, amount, GLOBAL);
         }
 
-        uint bunnyAmount = IBEP20(BUNNY).balanceOf(address(this)).sub(_initBunnyAmount);
-        IBEP20(BUNNY).safeTransfer(to, bunnyAmount);
+        uint bunnyAmount = IBEP20(GLOBAL).balanceOf(address(this)).sub(_initBunnyAmount);
+        IBEP20(GLOBAL).safeTransfer(to, bunnyAmount);
     }
 
     function _transferAsset(address asset, uint amount) private {
@@ -297,7 +298,7 @@ contract Minter is IBunnyMinterV2, OwnableUpgradeable {
     }
 
     function _mint(uint amount, address to) private {
-        BEP20 tokenBUNNY = BEP20(BUNNY);
+        BEP20 tokenBUNNY = BEP20(GLOBAL);
 
         tokenBUNNY.mint(amount);
         if (to != address(this)) {
