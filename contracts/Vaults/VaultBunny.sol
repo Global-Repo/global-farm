@@ -2,32 +2,40 @@
 pragma solidity ^0.6.12;
 pragma experimental ABIEncoderV2;
 
-import "../Factory/IBEP20.sol";
-import "../Common/SafeBEP20.sol";
 import "Math.sol";
+import "SafeMath.sol";
+import "../Common/SafeBEP20.sol";
+import "ReentrancyGuard.sol";
+import "ReentrancyGuardUpgradeable.sol";
+
 import "IStrategy.sol";
-import "IMasterChef.sol";
 import "IBunnyMinter.sol";
+import "IBunnyChef.sol";
 import "VaultController.sol";
 import {PoolConstant} from "PoolConstant.sol";
+import "IStrategyLegacy.sol";
+import "Minter/ZapBSC.sol";
 
-contract VaultCake is VaultController, IStrategy {
-    using SafeBEP20 for IBEP20;
+
+contract VaultBunnyMaximizer is VaultController, IStrategy, ReentrancyGuardUpgradeable {
     using SafeMath for uint;
+    using SafeBEP20 for IBEP20;
 
-    IBEP20 private constant TOKEN = IBEP20(0x2d1c09b9252F91019C6f31584653EB0A5E39aAB4);
-    IMasterChef private constant POOL = IMasterChef(0x7db533569958cC6876aD8252227AaFd39c39B422);
-    address private constant TREASURY = 0xae1671Faa94A7Cc296D3cb0c3619e35600de384C;
-    uint private constant DUST = 1000; // Dust removes excess irregularities
-    uint public constant override PID = 0;
-    uint public totalShares;
+    IBEP20 private constant TOKEN = IBEP20(0xC9849E6fdB743d08fAeE3E34dd2D1bc69EA11a51);
+    IStrategyLegacy private constant POOL = IStrategyLegacy(0xCADc8CB26c8C7cB46500E61171b5F27e9bd7889D);
+    address private constant TREASURY = 0x85c9162A51E03078bdCd08D4232Bab13ed414cC3;
+    // Removes excess irregularities
+    uint private constant DUST = 1000;
+
+    uint private totalShares;
     mapping (address => uint) private _shares;
     mapping (address => uint) private _principal;
     mapping (address => uint) private _depositedAt;
 
     function initialize() external initializer {
         __VaultController_init(TOKEN);
-        _stakingToken.safeApprove(address(POOL), uint(~0));
+        __ReentrancyGuard_init();
+        _stakingToken.approve(POOL, uint(- 1));
         setMinter(0x7db533569958cC6876aD8252227AaFd39c39B422);
     }
 
@@ -35,8 +43,8 @@ contract VaultCake is VaultController, IStrategy {
         return totalShares;
     }
 
-    function balance() public view override returns (uint amount) {
-        (amount,) = POOL.userInfo(PID, address(this));
+    function balance() public view override returns (uint) {
+        return POOL.balanceOf(address(this));
     }
 
     function balanceOf(address account) public view override returns (uint) {
@@ -64,7 +72,7 @@ contract VaultCake is VaultController, IStrategy {
         return 0;
     }
 
-    function priceShare() external view override returns(uint) {
+    function priceShare() external view override returns (uint) {
         if (totalShares == 0) return 1e18;
         return balance().mul(1e18).div(totalShares);
     }
@@ -100,7 +108,7 @@ contract VaultCake is VaultController, IStrategy {
         delete _principal[msg.sender];
         delete _depositedAt[msg.sender];
 
-        uint cakeHarvested = _withdrawStakingToken(amount);
+        POOL.withdraw(amount);
 
         uint profit = amount > principal ? amount.sub(principal) : 0;
         uint withdrawalFee = canMint() ? _minter.withdrawalFee(principal, depositTimestamp) : 0;
@@ -116,13 +124,11 @@ contract VaultCake is VaultController, IStrategy {
 
         _stakingToken.safeTransfer(msg.sender, amount);
         emit Withdrawn(msg.sender, amount, withdrawalFee);
-
-        _harvest(cakeHarvested);
     }
 
-    function harvest() external override {
-        uint cakeHarvested = _withdrawStakingToken(0);
-        _harvest(cakeHarvested);
+    function harvest() public override onlyKeeper {
+        uint bunnyHarvested = _withdrawStakingToken(0);
+        _harvest(bunnyHarvested);
     }
 
     function withdraw(uint shares) external override onlyWhitelisted {
@@ -130,11 +136,10 @@ contract VaultCake is VaultController, IStrategy {
         totalShares = totalShares.sub(shares);
         _shares[msg.sender] = _shares[msg.sender].sub(shares);
 
-        uint cakeHarvested = _withdrawStakingToken(amount);
+        IStrategyLegacy(POOL).withdraw(amount);
+
         _stakingToken.safeTransfer(msg.sender, amount);
         emit Withdrawn(msg.sender, amount, 0);
-
-        _harvest(cakeHarvested);
     }
 
     // @dev underlying only + withdrawal fee + no perf fee
@@ -145,28 +150,27 @@ contract VaultCake is VaultController, IStrategy {
         _shares[msg.sender] = _shares[msg.sender].sub(shares);
         _principal[msg.sender] = _principal[msg.sender].sub(amount);
 
-        uint cakeHarvested = _withdrawStakingToken(amount);
+        IStrategyLegacy(POOL).withdraw(amount);
+
         uint depositTimestamp = _depositedAt[msg.sender];
-        uint withdrawalFee = canMint() ? _minter.withdrawalFee(amount, depositTimestamp) : 0;
-        if (withdrawalFee > DUST) {
-            _minter.mintFor(address(TOKEN), withdrawalFee, 0, msg.sender, depositTimestamp);
+        uint withdrawalFee = _minter.withdrawalFee(amount, depositTimestamp);
+        if (withdrawalFee > 0) {
+            _stakingToken.safeTransfer(TREASURY, withdrawalFee);
             amount = amount.sub(withdrawalFee);
         }
 
-        TOKEN.safeTransfer(msg.sender, amount);
+        _stakingToken.safeTransfer(msg.sender, amount);
         emit Withdrawn(msg.sender, amount, withdrawalFee);
-
-        _harvest(cakeHarvested);
     }
 
-    function getReward() external override {
+    function getReward() public override nonReentrant {
         uint amount = earned(msg.sender);
         uint shares = Math.min(amount.mul(totalShares).div(balance()), _shares[msg.sender]);
         totalShares = totalShares.sub(shares);
         _shares[msg.sender] = _shares[msg.sender].sub(shares);
         _cleanupIfDustShares();
 
-        uint cakeHarvested = _withdrawStakingToken(amount);
+        uint bunnyHarvested = _withdrawStakingToken(amount);
         uint depositTimestamp = _depositedAt[msg.sender];
         uint performanceFee = canMint() ? _minter.performanceFee(amount) : 0;
         if (performanceFee > DUST) {
@@ -175,43 +179,9 @@ contract VaultCake is VaultController, IStrategy {
         }
 
         _stakingToken.safeTransfer(msg.sender, amount);
-        emit ProfitPaid(msg.sender, amount, performanceFee);
+        emit ProfitPaid(msg.sender, amount, 0);
 
-        _harvest(cakeHarvested);
-    }
-
-    function _depositStakingToken(uint amount) private returns(uint cakeHarvested) {
-        uint before = _stakingToken.balanceOf(address(this));
-        POOL.enterStaking(amount);
-        cakeHarvested = _stakingToken.balanceOf(address(this)).add(amount).sub(before);
-    }
-
-    function _withdrawStakingToken(uint amount) private returns(uint cakeHarvested) {
-        uint before = _stakingToken.balanceOf(address(this));
-        POOL.leaveStaking(amount);
-        cakeHarvested = _stakingToken.balanceOf(address(this)).sub(amount).sub(before);
-    }
-
-    function _harvest(uint cakeAmount) private {
-        if (cakeAmount > 0) {
-            emit Harvested(cakeAmount);
-            POOL.enterStaking(cakeAmount);
-        }
-    }
-
-    function _deposit(uint _amount, address _to) private notPaused {
-        uint _pool = balance(); // amount de cakes que te aquest vault al pool de cake
-        _stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
-        // = 0.016 cakes x 7148447 / 13570561 cakes = 0.008428182 shares
-        uint shares = totalShares == 0 ? _amount : (_amount.mul(totalShares)).div(_pool);
-
-        totalShares = totalShares.add(shares);
-        _shares[_to] = _shares[_to].add(shares);
-
-        uint cakeHarvested = _depositStakingToken(_amount);
-        emit Deposited(msg.sender, _amount);
-
-        _harvest(cakeHarvested);
+        _harvest(bunnyHarvested);
     }
 
     function _cleanupIfDustShares() private {
@@ -222,11 +192,48 @@ contract VaultCake is VaultController, IStrategy {
         }
     }
 
-    // @dev _stakingToken(CAKE) must not remain balance in this contract.
-    // So dev should be able to salvage staking token transferred by mistake.
-    function recoverToken(address _token, uint amount) virtual external override onlyOwner {
-        IBEP20(_token).safeTransfer(owner(), amount);
+    /* ========== RESTRICTED FUNCTIONS ========== */
 
-        emit Recovered(_token, amount);
+    function setMinter(address newMinter) public override onlyOwner {
+        VaultController.setMinter(newMinter);
+    }
+
+    function setBunnyChef(IBunnyChef _chef) public override onlyOwner {
+        require(address(_bunnyChef) == address(0), "VaultBunny: setBunnyChef only once");
+        VaultController.setBunnyChef(IBunnyChef(_chef));
+    }
+
+    /* ========== PRIVATE FUNCTIONS ========== */
+
+    function _withdrawStakingToken(uint amount) private returns(uint bunnyHarvested) {
+        uint before = _stakingToken.balanceOf(address(this));
+        POOL.withdraw(amount);
+        bunnyHarvested = _stakingToken.balanceOf(address(this)).sub(amount).sub(before);
+    }
+
+    function _harvest(uint bunnyAmount) private {
+        if (bunnyAmount > 0) {
+            emit Harvested(bunnyAmount);
+            POOL.deposit(bunnyAmount);
+        }
+    }
+
+    function _deposit(uint _amount, address _to) private nonReentrant notPaused {
+        uint _pool = balance();
+        _stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
+        uint shares = totalShares == 0 ? _amount : (_amount.mul(totalShares)).div(_pool);
+
+        totalShares = totalShares.add(shares);
+        _shares[_to] = _shares[_to].add(shares);
+
+        IStrategyLegacy(POOL).deposit(_amount);
+        emit Deposited(_to, _amount);
+    }
+
+    /* ========== SALVAGE PURPOSE ONLY ========== */
+
+    function recoverToken(address tokenAddress, uint tokenAmount) external override onlyOwner {
+        IBEP20(tokenAddress).safeTransfer(owner(), tokenAmount);
+        emit Recovered(tokenAddress, tokenAmount);
     }
 }
